@@ -18,5 +18,7 @@ _cgo_gotypes.go
 _cgo_export.*
 
 _testmain.go
-
+tags
+api.test
+api
 *.exe
