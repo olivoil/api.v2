@@ -24,6 +24,8 @@ type EndPoint struct {
 	Description string
 	// The middlewares to execute on the request.
 	Middleware MiddlewareStack
+	// Registered functions that run deferred during dispatch
+	deferredFuncs []func(e *EndPoint)
 	// documentation of a succesful response
 	Successfull *DocResp
 	// Documentation of a failed response
@@ -33,8 +35,8 @@ type EndPoint struct {
 }
 
 // Append a middleware to the middleware stack.
-func (e *EndPoint) Use(mw *Middleware) {
-	e.Middleware = append(e.Middleware, *mw)
+func (e *EndPoint) Use(mw Middleware) {
+	e.Middleware = append(e.Middleware, mw)
 }
 
 //
@@ -55,7 +57,7 @@ func (e *EndPoint) Dispatch() http.HandlerFunc {
 		}
 		// call each middleware
 		for _, m := range e.Middleware {
-			err, code := m.Handler(req)
+			err, code := m.Run(req)
 			if err != nil {
 				http.Error(req.Response, fmt.Sprintf("{\"error\":\"%s\"}", err), code)
 			}
