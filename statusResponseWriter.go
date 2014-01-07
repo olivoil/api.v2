@@ -33,3 +33,16 @@ func (srw *statusResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	}
 	return nil, nil, errors.New("ResponseWriter does not implement http.Hijacker")
 }
+
+func (srw *statusResponseWriter) Flush() {
+	if f, ok := srw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (srw *statusResponseWriter) CloseNotify() <-chan bool {
+	if cn, ok := srw.ResponseWriter.(http.CloseNotifier); ok {
+		return cn.CloseNotify()
+	}
+	return nil
+}
