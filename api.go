@@ -1,45 +1,93 @@
-// The api package is a Go package designed to provide tools to handle API requests.
-// The primarily goal is to support HTTP API endpoints.
 package api
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/julienschmidt/httprouter"
+)
 
 // Top-level API structure
 type API struct {
-	Endpoints     []Endpoint
-	Documentation *APIDoc
+	Endpoints []Endpoint
+	options   map[string][]string
+}
+
+// HandlerFunc
+type HandlerFunc func(*Req)
+
+func (f HandlerFunc) Serve(req *Req) {
+	f(req)
+}
+
+// Handler
+type Handler interface {
+	Serve(req *Req)
+}
+
+// Router
+type Router interface {
+	Add(method, path string, handler Handler)
 }
 
 func (api *API) Add(e Endpoint) {
+	// add endpoint
 	api.Endpoints = append(api.Endpoints, e)
+
+	// collect options for each path
+	if _, ok := api.options[e.Path]; !ok {
+		api.options[e.Path] = []string{"OPTIONS"}
+	}
+	api.options[e.Path] = append(api.options[e.Path], e.Verb)
 }
 
-type APIDoc struct {
-	Swagger  string
-	Info     *Info
-	Host     string
-	BasePath string
-	Schemes  []string
-	Consumes []string
-	Produces []string
+func (api *API) Activate(router Router) {
+	for _, endpoint := range api.Endpoints {
+		router.Add(endpoint.Verb, endpoint.Path, &endpoint)
+	}
+
+	for path, verbs := range api.options {
+		router.Add("OPTIONS", path, HandlerFunc(func(r *Req) {
+			r.Response.Header().Set("Allow", strings.Join(verbs, ","))
+			r.Response.WriteHeader(http.StatusNoContent)
+		}))
+	}
 }
 
-func New(options Options) API {
-	return API{}
+func WrapRouter(v interface{}) (Router, error) {
+	if r, ok := v.(*http.ServeMux); ok {
+		return &httpServeMuxAdapter{r}, nil
+	}
+
+	if r, ok := v.(*httprouter.Router); ok {
+		return &httprouterAdapter{r}, nil
+	}
+
+	return nil, errors.New(fmt.Sprintf("Cannot wrap unsupported router type: %+v", v))
 }
 
-type Options struct {
-	Host           string
-	BasePath       string
-	Schemes        []string
-	Consumes       []string
-	Produces       []string
-	Version        string
-	Title          string
-	Description    string
-	TermsOfService string
-	Contact        *Contact
-	License        *License
+type httpServeMuxAdapter struct {
+	*http.ServeMux
 }
 
-func (api API) MarshalJSON() ([]byte, error) {
-	return nil, nil
+func (router *httpServeMuxAdapter) Add(method, path string, h Handler) {
+	router.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == method {
+			req := WrapReq(w, r)
+			h.Serve(req)
+		}
+	}))
+}
+
+type httprouterAdapter struct {
+	*httprouter.Router
+}
+
+func (router *httprouterAdapter) Add(method, path string, h Handler) {
+	router.Handle(method, path, func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		req := WrapHttpRouterReq(w, r, ps)
+		h.Serve(req)
+	})
 }

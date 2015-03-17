@@ -1,7 +1,7 @@
 package api
 
 import (
-	"log"
+	"fmt"
 	"mime/multipart"
 	"net/url"
 	"os"
@@ -23,16 +23,18 @@ type Params struct {
 }
 
 func (r *Req) ParseParams() error {
-	r.Params.Query = r.Request.URL.Query()
 	if len(r.ContentType) == 0 {
 		r.ResolveContentType()
 	}
+
+	r.Params.Query = r.Request.URL.Query()
+
 	// Parse the body depending on the content type.
 	switch r.ContentType {
 	case "application/x-www-form-urlencoded":
 		// Typical form.
 		if err := r.Request.ParseForm(); err != nil {
-			log.Printf("[HTTP 400] Error parsing request body: %s - %v\n", err.Error(), r.Request)
+			r.AddLog(fmt.Sprintf("Error parsing request body: %s", WrapErr(err, 400).Error()))
 			return err
 		} else {
 			r.Params.Form = r.Request.Form

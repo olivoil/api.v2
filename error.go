@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strconv"
 )
 
@@ -15,11 +16,12 @@ type Error struct {
 	Title  string `json:"title,omitempty,required"`
 	Detail string `json:"detail,omitempty"`
 	Path   string `json:"path,omitempty"`
+	Stack  []byte `json:"-"`
 }
 
 // ErrorStack represents several errors
-type ErrorStack struct {
-	Errors []Error `json:"errors"`
+type Errors struct {
+	Err []Error `json:"errors"`
 }
 
 // WrapErr automatically wraps a standard error to an api.Error
@@ -29,29 +31,38 @@ func WrapErr(err error, status int) Error {
 
 	if ok {
 		apiErr.Status = s
+		apiErr.CaptureStackTrace()
 		return apiErr
 	}
 
-	return Error{
+	apiErr = Error{
 		Status: s,
 		Title:  err.Error(),
 	}
+
+	apiErr.CaptureStackTrace()
+	return apiErr
+}
+
+func (e *Error) CaptureStackTrace() {
+	stack := make([]byte, 1024*8)
+	e.Stack = stack[:runtime.Stack(stack, true)]
 }
 
 // Add returns a stack of errors
-func (e Error) Add(f Error) ErrorStack {
-	return ErrorStack{
-		Errors: []Error{e, f},
+func (e Error) Add(f Error) Errors {
+	return Errors{
+		Err: []Error{e, f},
 	}
 }
 
 // Error returns a nice string representation of an Error
 func (e Error) Error() string {
 	if e.Code != "" {
-		return fmt.Sprintf("%s error (%s) %s", e.Code, e.Status, e.Title)
+		return fmt.Sprintf("[%s] (%s) %s", e.Code, e.Status, e.Title)
 	}
 
-	return fmt.Sprintf("error (%s) %s", e.Status, e.Title)
+	return fmt.Sprintf("[http] (%s) %s", e.Status, e.Title)
 }
 
 // HTTPStatus returns the int value of the error status
@@ -70,36 +81,40 @@ func (e Error) HTTPBody() string {
 }
 
 // Add adds an error to a stack of error
-func (s *ErrorStack) Add(e Error) {
-	s.Errors = append(s.Errors, e)
+func (s *Errors) Add(e Error) {
+	s.Err = append(s.Err, e)
 }
 
 // Error returns a nice string representation of an Error
-func (e ErrorStack) Error() string {
-	l := len(e.Errors)
+func (e Errors) Error() string {
+	l := len(e.Err)
 
 	if l == 0 {
 		return ""
 	}
 
-	err := e.Errors[l-1]
+	err := e.Err[l-1]
 
 	if l == 1 {
 		return err.Error()
 	}
 
-	return err.Error() + ", and " + strconv.Itoa(l) + " more errors"
+	if l == 2 {
+		return err.Error() + ", and 1 more error"
+	}
+
+	return err.Error() + ", and " + strconv.Itoa(l-1) + " more errors"
 }
 
 // HTTPStatus returns the int value of the error status
-func (e ErrorStack) HTTPStatus() int {
-	l := len(e.Errors)
-	err := e.Errors[l-1]
+func (e Errors) HTTPStatus() int {
+	l := len(e.Err)
+	err := e.Err[l-1]
 	return err.HTTPStatus()
 }
 
 // HTTPBody returns the body of an http response for the error
-func (e ErrorStack) HTTPBody() string {
+func (e Errors) HTTPBody() string {
 	b, err := json.Marshal(e)
 	if err != nil {
 		return ""
