@@ -1,70 +1,60 @@
 package api
 
-import (
-	"fmt"
-	"net/http"
-	"net/url"
-)
-
-type DocResp struct {
-	StatusCode  int    // e.g. 200
-	Body        string // example response body
-	Description string // response description
-}
+import "net/http"
 
 // An Endpoint is the structure representing an API endpoint
-// encapsulating information needed to dispatch a request and generate
-// documentation.
-type EndPoint struct {
-	// The URL used to access the endpoint.
-	Url *url.URL
-	// GET, POST, PUT, etc.
-	Method string
-	// Description of the endpoint (goal, etc..)
-	Description string
+// encapsulating information needed to
+// dispatch a request and generate documentation.
+type Endpoint struct {
+	Url  string
+	Verb string
+
 	// The middlewares to execute on the request.
 	Middleware MiddlewareStack
-	// Registered functions that run deferred during dispatch
-	deferredFuncs []func(e *EndPoint)
-	// documentation of a succesful response
-	Successfull *DocResp
-	// Documentation of a failed response
-	Failed *DocResp
-	//
+
+	// Called after middleware stack was executed on the request
 	Implementation func(r *Req)
+
+	// Used to generate API documentation
+	Documentation *Operation
 }
 
 // Append a middleware to the middleware stack.
-func (e *EndPoint) Use(mw Middleware) {
+func (e *Endpoint) Use(mw Middleware) {
 	e.Middleware = append(e.Middleware, mw)
 }
 
-//
-func (e *EndPoint) Dispatch() http.HandlerFunc {
+// ServeHTTP implements the http.Handler interface
+func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Create the context
+	req := WrapReq(w, r)
+	defer req.handlePanic()
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Parse the parameters and cleanup
+	defer cleanUpParams(req)
+	err := req.ParseParams()
 
-		// Create the context
-		req := WrapReq(w, r)
-		defer req.handlePanic()
-		// Parse the parameters and cleanup
-		defer cleanUpParams(req)
-		err := req.ParseParams()
-		// We must return a 400 and stop here if there was a problem parsing the request.
+	// We must return a 400 and stop here if there was a problem parsing the request.
+	if err != nil {
+		e := WrapErr(err, 400)
+		http.Error(req.Response, e.HTTPBody(), e.HTTPStatus())
+		return
+	}
+
+	// call each middleware
+	for _, m := range e.Middleware {
+		err, code := m.Run(req)
 		if err != nil {
-			http.Error(req.Response, fmt.Sprintf("{\"error\":\"%s\"}", "Bad params"), 400)
-			return
+			e := WrapErr(err, code)
+			http.Error(req.Response, e.HTTPBody(), e.HTTPStatus())
 		}
-		// call each middleware
-		for _, m := range e.Middleware {
-			err, code := m.Run(req)
-			if err != nil {
-				http.Error(req.Response, fmt.Sprintf("{\"error\":\"%s\"}", err), code)
-			}
-		}
-		// Dispatch the request via the endpoint
-		e.Implementation(req)
-	})
+	}
 
-	return nil
+	// Dispatch the request via the endpoint
+	e.Implementation(req)
+}
+
+// HandlerFunc converts an Endpoint to a http.HandlerFunc
+func (e *Endpoint) HandlerFunc() http.HandlerFunc {
+	return http.HandlerFunc(e.ServeHTTP)
 }
