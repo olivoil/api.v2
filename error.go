@@ -76,7 +76,7 @@ func (e Error) HTTPStatus() int {
 
 // HTTPBody returns the body of an http response for the error
 func (e Error) HTTPBody() string {
-	s := ErrorStack{Errors: []Error{e}}
+	s := Errors{Err: []Error{e}}
 	return s.HTTPBody()
 }
 

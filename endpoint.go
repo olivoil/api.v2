@@ -10,8 +10,8 @@ import (
 // encapsulating information needed to
 // dispatch a request and generate documentation.
 type Endpoint struct {
-	Path string
 	Verb string
+	Path string
 
 	// The middlewares to execute on the request.
 	Middleware MiddlewareStack
@@ -21,29 +21,29 @@ type Endpoint struct {
 }
 
 // Append a middleware to the middleware stack.
-func (e *Endpoint) Use(mw Middleware) {
+func (e Endpoint) Use(mw Middleware) {
 	e.Middleware = append(e.Middleware, mw)
 }
 
 // ServeHTTP implements the http.Handler interface
-func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (e Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	req := WrapReq(w, r)
 	e.Serve(req)
 }
 
 // HandlerFunc converts an Endpoint to a http.HandlerFunc
-func (e *Endpoint) HandlerFunc() http.HandlerFunc {
+func (e Endpoint) HandlerFunc() http.HandlerFunc {
 	return http.HandlerFunc(e.ServeHTTP)
 }
 
 // Handle is a httprouter.Handle function
-func (e *Endpoint) Handle(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (e Endpoint) Handle(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	req := WrapHttpRouterReq(w, r, ps)
 	e.Serve(req)
 }
 
 // Serve dispatches an api.Req
-func (e *Endpoint) Serve(req *Req) {
+func (e Endpoint) Serve(req *Req) {
 	defer req.Clear()
 	defer req.handlePanic()
 
@@ -64,6 +64,7 @@ func (e *Endpoint) Serve(req *Req) {
 		if err != nil {
 			er := WrapErr(err, code)
 			http.Error(req.Response, er.HTTPBody(), er.HTTPStatus())
+			return
 		}
 	}
 

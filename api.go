@@ -2,17 +2,25 @@ package api
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
 )
 
+func New(prefix string) *API {
+	return &API{
+		prefix:    prefix,
+		Endpoints: []Endpoint{},
+		options:   map[string][]string{},
+	}
+}
+
 // Top-level API structure
 type API struct {
 	Endpoints []Endpoint
 	options   map[string][]string
+	prefix    string
 }
 
 // HandlerFunc
@@ -27,14 +35,20 @@ type Handler interface {
 	Serve(req *Req)
 }
 
-// Router
+// Router is an interface that helps activating an API
+// to different types of router libraries (pat, httprouter, http, etc.)
 type Router interface {
 	Add(method, path string, handler Handler)
 }
 
+// Add() adds an endpoint to the API
 func (api *API) Add(e Endpoint) {
 	// add endpoint
 	api.Endpoints = append(api.Endpoints, e)
+
+	if api.options == nil {
+		api.options = map[string][]string{}
+	}
 
 	// collect options for each path
 	if _, ok := api.options[e.Path]; !ok {
@@ -43,44 +57,43 @@ func (api *API) Add(e Endpoint) {
 	api.options[e.Path] = append(api.options[e.Path], e.Verb)
 }
 
-func (api *API) Activate(router Router) {
+// Activate() registers all endpoints in the api
+// to the provided router
+func (api *API) Activate(r interface{}) error {
+	router, err := WrapRouter(r)
+	if err != nil {
+		return err
+	}
+
 	for _, endpoint := range api.Endpoints {
-		router.Add(endpoint.Verb, endpoint.Path, &endpoint)
+		router.Add(endpoint.Verb, "/"+api.prefix+endpoint.Path, endpoint)
 	}
 
 	for path, verbs := range api.options {
-		router.Add("OPTIONS", path, HandlerFunc(func(r *Req) {
+		router.Add("OPTIONS", "/"+api.prefix+path, HandlerFunc(func(r *Req) {
 			r.Response.Header().Set("Allow", strings.Join(verbs, ","))
 			r.Response.WriteHeader(http.StatusNoContent)
 		}))
 	}
+
+	return nil
 }
 
+// Wrap a router to be used with Activate
+// i.e. api.Activate(WrapRouter(router))
 func WrapRouter(v interface{}) (Router, error) {
-	if r, ok := v.(*http.ServeMux); ok {
-		return &httpServeMuxAdapter{r}, nil
-	}
-
 	if r, ok := v.(*httprouter.Router); ok {
 		return &httprouterAdapter{r}, nil
 	}
 
-	return nil, errors.New(fmt.Sprintf("Cannot wrap unsupported router type: %+v", v))
+	if r, ok := v.(patRouter); ok {
+		return &patAdapter{r: r}, nil
+	}
+
+	return nil, errors.New("Cannot wrap unsupported router type")
 }
 
-type httpServeMuxAdapter struct {
-	*http.ServeMux
-}
-
-func (router *httpServeMuxAdapter) Add(method, path string, h Handler) {
-	router.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == method {
-			req := WrapReq(w, r)
-			h.Serve(req)
-		}
-	}))
-}
-
+// Adapter for github.com/julienschmidt/httprouter
 type httprouterAdapter struct {
 	*httprouter.Router
 }
@@ -90,4 +103,20 @@ func (router *httprouterAdapter) Add(method, path string, h Handler) {
 		req := WrapHttpRouterReq(w, r, ps)
 		h.Serve(req)
 	})
+}
+
+// Adapter for pat-like routers (github.com/gorilla/pat, github.com/bmizerany/pat)
+type patRouter interface {
+	Add(meth, pat string, h http.Handler)
+}
+
+type patAdapter struct {
+	r patRouter
+}
+
+func (router patAdapter) Add(method, path string, h Handler) {
+	router.r.Add(method, path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req := WrapReq(w, r)
+		h.Serve(req)
+	}))
 }

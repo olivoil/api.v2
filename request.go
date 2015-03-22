@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -92,6 +93,19 @@ func (r *Req) ResolveContentType() string {
 	return r.ContentType
 }
 
+// JsonBody() extracts the body from a request as a byte array
+// so it cam be unmarshalled if desired.
+func (r *Req) JsonBody() ([]byte, error) {
+	if r.Request.Body == nil {
+		return []byte{}, nil
+	}
+	json, err := ioutil.ReadAll(r.Request.Body)
+	if err != nil {
+		return json, err
+	}
+	return json, nil
+}
+
 // Decode decodes a request body into the value pointed to by v.
 func (r *Req) Decode(v interface{}) error {
 	if r.decoder == nil {
@@ -116,9 +130,9 @@ func (r *Req) handlePanic() {
 
 		http.Error(r.Response, err.HTTPBody(), err.HTTPStatus())
 		r.AddLog(fmt.Sprintf("%s - %v\n", err.Error(), r.Request))
-		if err.Stack != nil {
-			r.AddLog(string(err.Stack))
-		}
+		// if err.Stack != nil {
+		// 	r.AddLog(string(err.Stack))
+		// }
 	}
 }
 
@@ -127,6 +141,19 @@ func (r *Req) AddLog(s string) {
 	r.m.Lock()
 	r.Log = append(r.Log, s)
 	r.m.Unlock()
+}
+
+// Expose request context
+func (r *Req) Set(k interface{}, v interface{}) {
+	context.Set(r.Request, k, v)
+}
+
+func (r *Req) Get(k interface{}) interface{} {
+	return context.Get(r.Request, k)
+}
+
+func (r *Req) GetOk(k interface{}) (interface{}, bool) {
+	return context.GetOk(r.Request, k)
 }
 
 func (r *Req) Clear() {
