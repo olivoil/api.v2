@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"strings"
-	"sync"
 
 	"code.google.com/p/go-uuid/uuid"
 
@@ -22,9 +20,8 @@ type Req struct {
 	Response    http.ResponseWriter
 	Request     *http.Request
 	Params      *Params // Parameters from URL and form (including multipart).
-	ContentType string
+	ContentType string  // Content-Type of the request
 
-	m   sync.Mutex
 	Log []string // A slice of log messages attached to the request.
 
 	decoder *json.Decoder
@@ -46,30 +43,16 @@ func WrapReq(w http.ResponseWriter, r *http.Request) *Req {
 
 // WrapReq wraps a request dispatched by httprouter.
 func WrapHttpRouterReq(w http.ResponseWriter, r *http.Request, ps httprouter.Params) *Req {
-	if len(ps) > 0 {
-		vars := map[string]string{}
+	params := new(Params)
+
+	if ps != nil && len(ps) > 0 {
+		params.Path = make(Values, len(ps))
 		for _, p := range ps {
-			vars[p.Key] = p.Value
+			params.Path[":"+p.Key] = splitValues([]string{p.Value}, ",")
 		}
-		registerVars(r, vars)
 	}
 
-	return NewReq(w, r, new(Params))
-}
-
-// registerVars adds the matched route variables to the URL query.
-func registerVars(r *http.Request, vars map[string]string) {
-	parts, i := make([]string, len(vars)), 0
-	for key, value := range vars {
-		parts[i] = url.QueryEscape(":"+key) + "=" + url.QueryEscape(value)
-		i++
-	}
-	q := strings.Join(parts, "&")
-	if r.URL.RawQuery == "" {
-		r.URL.RawQuery = q
-	} else {
-		r.URL.RawQuery += "&" + q
-	}
+	return NewReq(w, r, params)
 }
 
 // ResponseStatus returns the response status code if available yet (0 otherwise).
@@ -106,6 +89,13 @@ func (r *Req) JsonBody() ([]byte, error) {
 	return json, nil
 }
 
+func (r *Req) JsonForm() ([]byte, error) {
+	if r.Params.Form == nil {
+		return []byte{}, nil
+	}
+	return json.Marshal(r.Params.Form)
+}
+
 // Decode decodes a request body into the value pointed to by v.
 func (r *Req) Decode(v interface{}) error {
 	if r.decoder == nil {
@@ -138,9 +128,7 @@ func (r *Req) handlePanic() {
 
 // Add a string to the request log
 func (r *Req) AddLog(s string) {
-	r.m.Lock()
 	r.Log = append(r.Log, s)
-	r.m.Unlock()
 }
 
 // Expose request context

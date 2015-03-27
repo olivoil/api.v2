@@ -19,6 +19,12 @@ type Error struct {
 	Stack  []byte `json:"-"`
 }
 
+func NewError(status int, title string) Error {
+	err := Error{Status: strconv.Itoa(status), Title: title}
+	err.CaptureStackTrace()
+	return err
+}
+
 // ErrorStack represents several errors
 type Errors struct {
 	Err []Error `json:"errors"`

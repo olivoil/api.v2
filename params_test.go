@@ -46,4 +46,20 @@ var _ = Describe("Params", func() {
 		err = req.ParseParams()
 		Expect(err).ToNot(HaveOccurred())
 	})
+
+	It("splits values separated by commas", func() {
+		r, err := http.NewRequest("POST", "/users/:id?bonjour=hello,hola", nil)
+		Expect(err).ToNot(HaveOccurred())
+		r.Header.Set("Content-Type", "application/json; charset=utf-8")
+		req := &Req{
+			Request:  r,
+			Response: nil,
+			Params:   new(Params),
+		}
+		err = req.ParseParams()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(req.Params.Get("bonjour")).To(Equal("hello"))
+		Expect(len(req.Params.GetAll("bonjour"))).To(Equal(2))
+		Expect(req.Params.GetAll("bonjour")).To(Equal([]string{"hello", "hola"}))
+	})
 })

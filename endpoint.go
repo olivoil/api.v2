@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -60,12 +61,16 @@ func (e Endpoint) Serve(req *Req) {
 
 	// call each middleware
 	for _, m := range e.Middleware {
+		req.AddLog(fmt.Sprintf("Start middleware %s\n", m.Name()))
 		err, code := m.Run(req)
 		if err != nil {
+			req.AddLog(fmt.Sprintf("Error in middleware %s: %s\n", m.Name(), err))
 			er := WrapErr(err, code)
-			http.Error(req.Response, er.HTTPBody(), er.HTTPStatus())
+			req.Response.WriteHeader(er.HTTPStatus())
+			fmt.Fprintln(req.Response, er.HTTPBody())
 			return
 		}
+		req.AddLog(fmt.Sprintf("End middleware %s\n", m.Name()))
 	}
 
 	// Dispatch the request via the endpoint

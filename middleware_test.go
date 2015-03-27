@@ -1,6 +1,8 @@
 package api
 
 import (
+	"strings"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -14,7 +16,7 @@ var _ = Describe("Middleware", func() {
 
 			f := MiddlewareFunc(middlewareOK)
 
-			Expect(f.Name()).To(Equal("github.com/olivoil/api.func·021"))
+			Expect(strings.Contains(f.Name(), "github.com/olivoil/api.func")).To(Equal(true))
 		})
 	})
 })
