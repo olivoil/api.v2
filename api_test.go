@@ -22,7 +22,7 @@ func login(r *Req) (error, int) {
 
 // Auth middleware
 func auth(r *Req) (error, int) {
-	if _, ok := r.GetOk("userID"); ok {
+	if ok := r.GetString("userID"); ok != "" {
 		return nil, http.StatusOK
 	}
 	return errors.New("not authenticated"), http.StatusUnauthorized
@@ -85,7 +85,7 @@ var _ = Describe("api integration", func() {
 			api.Activate(router)
 
 			res := httptest.NewRecorder()
-			req, _ := http.NewRequest("POST", "/v1/pets", strings.NewReader(`{"name":"moufassa","id":"abc"}`))
+			req, _ := http.NewRequest("POST", "/v1/pets", strings.NewReader(`{"name":"moufassa","id":"king"}`))
 			router.ServeHTTP(res, req)
 
 			Expect(res.Code).To(Equal(401))

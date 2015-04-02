@@ -95,7 +95,7 @@ func (p *Params) calcValues() Values {
 		values.Append(k, splitValues(v, ",")...)
 	}
 	for k, v := range p.Form {
-		values.Append(k, splitValues(v, ",")...)
+		values.Append(k, v...)
 	}
 	for k, v := range p.Path {
 		values.Append(k, splitValues(v, ",")...)

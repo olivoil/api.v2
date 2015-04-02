@@ -1,162 +1,187 @@
 package api
 
-import (
-	"errors"
-	"fmt"
-	"reflect"
-)
+import "fmt"
 
+// Resource to facilitate writing the Implementation function in REST endpoints
+// Example Usage:
+//
+//   type UserDataSource struct {
+//     db *sql.DB
+//   }
+//
+//   func (s *UserDataSource) FindOne(model *Model) (*Model, error) {}
+//   func (s *UserDataSource) FindAll(model *Model) (*Model, error) {
+//     s.db.Limit(model.Query.GetInt(limit)).Offset(model.Query.GetInt(offset)).Find(&model.Data)
+//     s.db.Model(&User{}).Count(&model.Response["total"])
+//     return model, nil
+//   }
+//   func (s *UserDataSource) Create(model *Model) (string, error) {}
+//   func (s *UserDataSource) Update(model *Model) (string, error) {}
+//   func (s *UserDataSource) Delete(model *Model) error {}
+//
+//   type ListUsersRequest struct {
+//   }
+//
+//   func (r *ListUsersRequest) ParseRequest(req *Req) (*Model, error) {
+//     return &Model{
+//       Data: []*User{},
+//       Query: Meta{
+//         "limit": strconv.Atoi(req.Params.Get("limit")),
+//         "offset": strconv.Atoi(req.Params.Get("offset")),
+//       },
+//       Response: Meta{
+//         "Location": "/users/"+user.ID,
+//       },
+//     }, nil
+//   }
+//
+//   type UsersResponse struct {
+//     Data []*User `json:"data"`
+//     Links map[string]string `json:"links,omitempty"`
+//   }
+//
+//   func (r *UsersResponse) Body(model *Model) interface{} {
+//     r.Data = model.Data
+//     r.Links["self"] = model.Response.GetString("Location")
+//     return r
+//   }
+//
+//   func (r *UsersResponse) Status(model *Model) int {
+//      if len(model.Data) > 0 {
+//        return  http.StatusOk
+//      } else {
+//        return http.StatusNotFound
+//      }
+//   }
+//
+//   func (r *UsersResponse) Headers(model *Model) map[string]string {
+//     return model.Response.GetStringMapString("headers")
+//   }
+//
+//   api.Add(Endpoint{
+//     Verb: "GET",
+//     Path: "/users",
+//     Implementation: func(req *Req){
+//       res := NewResource(req, &UserDataSource{db: db})
+//
+//       model, err := res.HandleIndex(&ListUsersRequest{})
+//       if err != nil {
+//         res.HandleError(err)
+//         return
+//       }
+//
+//       err = res.Send(model, &UsersResponse{})
+//       if err != nil {
+//         res.HandleError(err)
+//         return
+//       }
+//     },
+//   })
+//
+//   api.Activate(router)
+//
 type Resource struct {
-	resourceType reflect.Type
-	source       DataSource
+	Req    *Req
+	Source DataSource
 }
 
 // DataSource provides methods needed for CRUD.
 type DataSource interface {
-	// FindAll returns all objects
-	FindAll(*Req) (interface{}, error)
+	// FindOne returns a model from a parsed query
+	FindOne(*Model) error
 
-	// FindOne returns an object by its ID
-	FindOne(ID string, req *Req) (interface{}, error)
-
-	// FindMultiple returns all objects for the specified IDs
-	FindMultiple(IDs []string, req *Req) (interface{}, error)
+	// FindAll returns all objects specified in query
+	FindAll(*Model) error
 
 	// Create a new object and return its ID
-	Create(v interface{}, req *Req) (string, error)
+	// CONVENTION: place created resource id in model.Response["id"]
+	Create(*Model) error
+
+	// Update an object and return its ID
+	Update(*Model) error
 
 	// Delete an object
-	Delete(id string, req *Req) error
-
-	// Update an object
-	Update(obj interface{}, req *Req) error
+	Delete(*Model) error
 }
 
-// Request unmarshals a *Req into an interface value
-type RequestModel interface {
-	Unmarshal(req *Req) (interface{}, error)
-}
-
-func NewResource(model interface{}, source DataSource) *Resource {
-	resourceType := reflect.TypeOf(model)
-	if resourceType.Kind() != reflect.Struct {
-		panic("pass an empty model struct to api.NewResource(Model{}, &DataSource{})!")
-	}
-
+func NewResource(req *Req, source DataSource) *Resource {
 	return &Resource{
-		resourceType: resourceType,
-		source:       source,
+		Source: source,
+		Req:    req,
 	}
 }
 
-func (r *Resource) HandleIndex(req *Req) (interface{}, error) {
-	objs, err := r.source.FindAll(req)
+func (r *Resource) HandleIndex(rp RequestParser) (model *Model, err error) {
+	model, err = rp.ParseRequest(r.Req)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	return objs, nil
+	err = r.Source.FindAll(model)
+	return
 }
 
-func (r *Resource) HandleRead(req *Req) (interface{}, error) {
-	ids := req.Params.GetAll(":id")
-
-	var (
-		obj interface{}
-		err error
-	)
-
-	if len(ids) == 1 {
-		obj, err = r.source.FindOne(ids[0], req)
-	} else {
-		obj, err = r.source.FindMultiple(ids, req)
-	}
-
+func (r *Resource) HandleRead(rp RequestParser) (model *Model, err error) {
+	model, err = rp.ParseRequest(r.Req)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	return obj, nil
+	err = r.Source.FindOne(model)
+	return
 }
 
-func (r *Resource) HandleCreate(req *Req, mod RequestModel) (interface{}, error) {
+func (r *Resource) HandleCreate(rp RequestParser) (model *Model, err error) {
 	// Unmarshal request model into model values
-	v, err := mod.Unmarshal(req)
+	model, err = rp.ParseRequest(r.Req)
 	if err != nil {
-		return nil, err
-	}
-	newObjs := reflect.ValueOf(v).Convert(reflect.SliceOf(r.resourceType))
-
-	if newObjs.Len() != 1 {
-		return nil, errors.New("expected one object in POST")
+		return
 	}
 
-	newObj := newObjs.Index(0).Interface()
-
-	// Create model
-	id, err := r.source.Create(newObj, req)
+	err = r.Source.Create(model)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	// Find model
-	obj, err := r.source.FindOne(id, req)
-	if err != nil {
-		return nil, err
-	}
-
-	return obj, nil
+	model.Query.Set("id", model.Response.Get("id"))
+	err = r.Source.FindOne(model)
+	return
 }
 
-func (r *Resource) HandleUpdate(req *Req, mod RequestModel) (interface{}, error) {
-	// Find one model to update
-	obj, err := r.source.FindOne(req.Params.Get(":id"), req)
+func (r *Resource) HandleUpdate(rp RequestParser) (model *Model, err error) {
+	// Unmarshal request model into model values
+	// CONVENTION: pr.Data => pointer to model struct containing the properties that will be updated
+	model, err = rp.ParseRequest(r.Req)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	v, err := mod.Unmarshal(req)
+	err = r.Source.Update(model)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	updatingObjs := reflect.ValueOf(v).Convert(reflect.SliceOf(r.resourceType))
-
-	if updatingObjs.Len() != 1 {
-		return nil, errors.New("expected one object in PUT")
-	}
-
-	// Update model
-	updatingObj := updatingObjs.Index(0).Interface()
-
-	if err := r.source.Update(updatingObj, req); err != nil {
-		return nil, err
-	}
-
-	obj, err = r.source.FindOne(req.Params.Get(":id"), req)
-	if err != nil {
-		return nil, err
-	}
-
-	return obj, nil
+	err = r.Source.FindOne(model)
+	return
 }
 
-func (r *Resource) HandleDelete(req *Req) (interface{}, error) {
-	obj, err := r.source.FindOne(req.Params.Get(":id"), req)
+func (r *Resource) HandleDelete(rp RequestParser) (model *Model, err error) {
+	model, err = rp.ParseRequest(r.Req)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	err = r.source.Delete(req.Params.Get(":id"), req)
+	err = r.Source.FindOne(model)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	return obj, nil
+	err = r.Source.Delete(model)
+	return
 }
 
-func (r *Resource) HandleError(req *Req, err error) {
-	handleError(req, err)
+func (r *Resource) HandleError(err error) {
+	handleError(r.Req, err)
 }
 
 func HandleError(req *Req, err error) {
@@ -172,4 +197,29 @@ func handleError(req *Req, err error) {
 
 	req.Response.WriteHeader(apiErr.HTTPStatus())
 	fmt.Fprintln(req.Response, apiErr.HTTPBody())
+}
+
+func (r *Resource) Send(model *Model, rm ResponseMarshaller) error {
+	return send(r.Req, model, rm)
+}
+
+func Send(req *Req, model *Model, rm ResponseMarshaller) error {
+	return send(req, model, rm)
+}
+
+func send(req *Req, model *Model, rm ResponseMarshaller) error {
+	encoder := JsonEncoder{}
+	data, err := encoder.Encode(rm.Body(model))
+	if err != nil {
+		return err
+	}
+	headers := rm.Headers(model)
+	if headers != nil {
+		for key, val := range headers {
+			req.Response.Header().Set(key, val)
+		}
+	}
+	req.Response.WriteHeader(rm.Status(model))
+	req.Response.Write(data)
+	return nil
 }

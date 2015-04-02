@@ -2,15 +2,19 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"reflect"
 	"strings"
+	"time"
 
 	"code.google.com/p/go-uuid/uuid"
 
 	"github.com/gorilla/context"
 	"github.com/julienschmidt/httprouter"
+	"github.com/spf13/cast"
 )
 
 // Req is a HTTP request wrapper giving you easy access to the params
@@ -132,18 +136,107 @@ func (r *Req) AddLog(s string) {
 }
 
 // Expose request context
-func (r *Req) Set(k interface{}, v interface{}) {
-	context.Set(r.Request, k, v)
-}
-
-func (r *Req) Get(k interface{}) interface{} {
-	return context.Get(r.Request, k)
-}
-
-func (r *Req) GetOk(k interface{}) (interface{}, bool) {
-	return context.GetOk(r.Request, k)
+func (r *Req) Set(key string, value interface{}) {
+	context.Set(r.Request, strings.ToLower(key), value)
 }
 
 func (r *Req) Clear() {
 	context.Clear(r.Request)
+}
+
+func (r *Req) Get(key string) interface{} {
+	val, ok := context.GetOk(r.Request, strings.ToLower(key))
+
+	if !ok {
+		return nil
+	}
+
+	switch val.(type) {
+	case bool:
+		return cast.ToBool(val)
+	case string:
+		return cast.ToString(val)
+	case int64, int32, int16, int8, int:
+		return cast.ToInt(val)
+	case float64, float32:
+		return cast.ToFloat64(val)
+	case time.Time:
+		return cast.ToTime(val)
+	case time.Duration:
+		return cast.ToDuration(val)
+	case []string:
+		return val
+	}
+	return val
+}
+
+func (r *Req) GetString(key string) string {
+	return cast.ToString(r.Get(key))
+}
+
+func (r *Req) GetBool(key string) bool {
+	return cast.ToBool(r.Get(key))
+}
+
+func (r *Req) GetInt(key string) int {
+	return cast.ToInt(r.Get(key))
+}
+
+func (r *Req) GetFloat64(key string) float64 {
+	return cast.ToFloat64(r.Get(key))
+}
+
+func (r *Req) GetTime(key string) time.Time {
+	return cast.ToTime(r.Get(key))
+}
+
+func (r *Req) GetDuration(key string) time.Duration {
+	return cast.ToDuration(r.Get(key))
+}
+
+func (r *Req) GetStringSlice(key string) []string {
+	return cast.ToStringSlice(r.Get(key))
+}
+
+func (r *Req) GetStringMap(key string) map[string]interface{} {
+	return cast.ToStringMap(r.Get(key))
+}
+
+func (r *Req) GetStringMapString(key string) map[string]string {
+	return cast.ToStringMapString(r.Get(key))
+}
+
+// Populate marshals the value of key into ptr
+// Convenience method for a generic-type Message map
+func (r *Req) Populate(key string, ptr interface{}) (err error) {
+	val := r.Get(key)
+	if val == nil {
+		return
+	}
+
+	// don't panic, return the error
+	defer func() {
+		if r := recover(); r != nil {
+			switch x := r.(type) {
+			case string:
+				err = errors.New(x)
+			case error:
+				err = x
+			default:
+				err = errors.New("Unknown panic")
+			}
+		}
+	}()
+
+	// lookup ptr's type
+	typ := reflect.TypeOf(ptr)
+	if typ.Kind() != reflect.Ptr {
+		err = errors.New("Populate(key, ptr): ptr must be a pointer")
+		return
+	}
+	typ = typ.Elem()
+
+	// point the pointer at the new value
+	ptr = reflect.ValueOf(val).Convert(typ)
+	return
 }

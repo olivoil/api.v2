@@ -33,16 +33,14 @@ type Errors struct {
 // WrapErr automatically wraps a standard error to an api.Error
 func WrapErr(err error, status int) Error {
 	apiErr, ok := err.(Error)
-	s := strconv.Itoa(status)
 
 	if ok {
-		apiErr.Status = s
 		apiErr.CaptureStackTrace()
 		return apiErr
 	}
 
 	apiErr = Error{
-		Status: s,
+		Status: strconv.Itoa(status),
 		Title:  err.Error(),
 	}
 

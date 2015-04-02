@@ -54,3 +54,12 @@ func (v Values) Append(key string, value ...string) {
 	}
 	v[key] = append(vs, value...)
 }
+
+func (v Values) Contains(key, sep string) bool {
+	for _, value := range v.GetAll(key) {
+		if value == sep {
+			return true
+		}
+	}
+	return false
+}
