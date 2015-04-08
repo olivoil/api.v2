@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"time"
@@ -50,6 +51,14 @@ type Model struct {
 	Data     interface{}
 	Query    Meta
 	Response Meta
+}
+
+func NewModel(data interface{}) *Model {
+	return &Model{
+		Data:     data,
+		Query:    Meta{},
+		Response: Meta{},
+	}
 }
 
 type Meta map[string]interface{}
@@ -102,6 +111,7 @@ func (m Meta) Get(key string) interface{} {
 }
 
 func (m Meta) GetString(key string) string {
+	fmt.Println(key, m.Get(key), cast.ToString(m.Get(key)))
 	return cast.ToString(m.Get(key))
 }
 

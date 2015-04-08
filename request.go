@@ -1,3 +1,5 @@
+// TODO: use google's context.Context
+
 package api
 
 import (
@@ -101,12 +103,21 @@ func (r *Req) JsonForm() ([]byte, error) {
 }
 
 // Decode decodes a request body into the value pointed to by v.
-func (r *Req) Decode(v interface{}) error {
-	if r.decoder == nil {
-		r.decoder = json.NewDecoder(r.Request.Body)
+func (r *Req) Decode(v interface{}) (err error) {
+	b, err := r.JsonBody()
+	if err != nil {
+		return
 	}
 
-	return r.decoder.Decode(v)
+	err = json.Unmarshal(b, v)
+	fmt.Println("body ", string(b))
+	fmt.Printf("v %+v\n", v)
+	return
+	// if r.decoder == nil {
+	// 	r.decoder = json.NewDecoder(r.Request.Body)
+	// }
+	//
+	// return r.decoder.Decode(v)
 }
 
 // handlePanic is a function usually used in defer

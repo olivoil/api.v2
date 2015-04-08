@@ -1,3 +1,5 @@
+// TODO: use google's context.Context
+
 package api
 
 import "fmt"
@@ -94,7 +96,7 @@ type DataSource interface {
 	FindAll(*Model) error
 
 	// Create a new object and return its ID
-	// CONVENTION: place created resource id in model.Response["id"]
+	// CONVENTION: Set Query variables useful in FindOne before returning from this func
 	Create(*Model) error
 
 	// Update an object and return its ID
@@ -143,7 +145,6 @@ func (r *Resource) HandleCreate(rp RequestParser) (model *Model, err error) {
 		return
 	}
 
-	model.Query.Set("id", model.Response.Get("id"))
 	err = r.Source.FindOne(model)
 	return
 }
