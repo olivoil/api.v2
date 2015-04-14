@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/net/context"
 )
 
 // An Endpoint is the structure representing an API endpoint
@@ -18,7 +19,7 @@ type Endpoint struct {
 	Middleware MiddlewareStack
 
 	// Called after middleware stack was executed on the request
-	Implementation func(r *Req)
+	Implementation func(ctx context.Context, r *Req)
 }
 
 // Append a middleware to the middleware stack.
@@ -29,7 +30,7 @@ func (e Endpoint) Use(mw Middleware) {
 // ServeHTTP implements the http.Handler interface
 func (e Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	req := WrapReq(w, r)
-	e.Serve(req)
+	e.Serve(context.Background(), req)
 }
 
 // HandlerFunc converts an Endpoint to a http.HandlerFunc
@@ -40,12 +41,11 @@ func (e Endpoint) HandlerFunc() http.HandlerFunc {
 // Handle is a httprouter.Handle function
 func (e Endpoint) Handle(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	req := WrapHttpRouterReq(w, r, ps)
-	e.Serve(req)
+	e.Serve(context.Background(), req)
 }
 
 // Serve dispatches an api.Req
-func (e Endpoint) Serve(req *Req) {
-	defer req.Clear()
+func (e Endpoint) Serve(ctx context.Context, req *Req) {
 	defer req.handlePanic()
 
 	// Parse the parameters and cleanup
@@ -61,18 +61,16 @@ func (e Endpoint) Serve(req *Req) {
 
 	// call each middleware
 	for _, m := range e.Middleware {
-		req.AddLog(fmt.Sprintf("Start middleware %s\n", m.Name()))
-		err, code := m.Run(req)
+		err, c := m.Run(ctx, req)
 		if err != nil {
-			req.AddLog(fmt.Sprintf("Error in middleware %s: %s\n", m.Name(), err))
-			er := WrapErr(err, code)
+			er := WrapErr(err, 0)
 			req.Response.WriteHeader(er.HTTPStatus())
 			fmt.Fprintln(req.Response, er.HTTPBody())
 			return
 		}
-		req.AddLog(fmt.Sprintf("End middleware %s\n", m.Name()))
+		ctx = c
 	}
 
 	// Dispatch the request via the endpoint
-	e.Implementation(req)
+	e.Implementation(ctx, req)
 }

@@ -2,86 +2,22 @@
 
 package api
 
-import "fmt"
+import (
+	"fmt"
 
-// Resource to facilitate writing the Implementation function in REST endpoints
-// Example Usage:
-//
-//   type UserDataSource struct {
-//     db *sql.DB
-//   }
-//
-//   func (s *UserDataSource) FindOne(model *Model) (*Model, error) {}
-//   func (s *UserDataSource) FindAll(model *Model) (*Model, error) {
-//     s.db.Limit(model.Query.GetInt(limit)).Offset(model.Query.GetInt(offset)).Find(&model.Data)
-//     s.db.Model(&User{}).Count(&model.Response["total"])
-//     return model, nil
-//   }
-//   func (s *UserDataSource) Create(model *Model) (string, error) {}
-//   func (s *UserDataSource) Update(model *Model) (string, error) {}
-//   func (s *UserDataSource) Delete(model *Model) error {}
-//
-//   type ListUsersRequest struct {
-//   }
-//
-//   func (r *ListUsersRequest) ParseRequest(req *Req) (*Model, error) {
-//     return &Model{
-//       Data: []*User{},
-//       Query: Meta{
-//         "limit": strconv.Atoi(req.Params.Get("limit")),
-//         "offset": strconv.Atoi(req.Params.Get("offset")),
-//       },
-//       Response: Meta{
-//         "Location": "/users/"+user.ID,
-//       },
-//     }, nil
-//   }
-//
-//   type UsersResponse struct {
-//     Data []*User `json:"data"`
-//     Links map[string]string `json:"links,omitempty"`
-//   }
-//
-//   func (r *UsersResponse) Body(model *Model) interface{} {
-//     r.Data = model.Data
-//     r.Links["self"] = model.Response.GetString("Location")
-//     return r
-//   }
-//
-//   func (r *UsersResponse) Status(model *Model) int {
-//      if len(model.Data) > 0 {
-//        return  http.StatusOk
-//      } else {
-//        return http.StatusNotFound
-//      }
-//   }
-//
-//   func (r *UsersResponse) Headers(model *Model) map[string]string {
-//     return model.Response.GetStringMapString("headers")
-//   }
-//
-//   api.Add(Endpoint{
-//     Verb: "GET",
-//     Path: "/users",
-//     Implementation: func(req *Req){
-//       res := NewResource(req, &UserDataSource{db: db})
-//
-//       model, err := res.HandleIndex(&ListUsersRequest{})
-//       if err != nil {
-//         res.HandleError(err)
-//         return
-//       }
-//
-//       err = res.Send(model, &UsersResponse{})
-//       if err != nil {
-//         res.HandleError(err)
-//         return
-//       }
-//     },
-//   })
-//
-//   api.Activate(router)
-//
+	"golang.org/x/net/context"
+)
+
+type RequestParser interface {
+	ParseRequest(context.Context, *Req) (context.Context, error)
+}
+
+type ResponseMarshaller interface {
+	Body(context.Context) interface{}
+	Headers(context.Context) map[string]string
+	Status(context.Context) int
+}
+
 type Resource struct {
 	Req    *Req
 	Source DataSource
@@ -90,20 +26,19 @@ type Resource struct {
 // DataSource provides methods needed for CRUD.
 type DataSource interface {
 	// FindOne returns a model from a parsed query
-	FindOne(*Model) error
+	FindOne(context.Context) (context.Context, error)
 
 	// FindAll returns all objects specified in query
-	FindAll(*Model) error
+	FindAll(context.Context) (context.Context, error)
 
 	// Create a new object and return its ID
-	// CONVENTION: Set Query variables useful in FindOne before returning from this func
-	Create(*Model) error
+	Create(context.Context) (context.Context, error)
 
 	// Update an object and return its ID
-	Update(*Model) error
+	Update(context.Context) (context.Context, error)
 
 	// Delete an object
-	Delete(*Model) error
+	Delete(context.Context) (context.Context, error)
 }
 
 func NewResource(req *Req, source DataSource) *Resource {
@@ -113,71 +48,69 @@ func NewResource(req *Req, source DataSource) *Resource {
 	}
 }
 
-func (r *Resource) HandleIndex(rp RequestParser) (model *Model, err error) {
-	model, err = rp.ParseRequest(r.Req)
+func (r *Resource) HandleIndex(ctx context.Context, rp RequestParser) (ct context.Context, err error) {
+	c, err := rp.ParseRequest(ctx, r.Req)
 	if err != nil {
 		return
 	}
 
-	err = r.Source.FindAll(model)
+	ct, err = r.Source.FindAll(c)
 	return
 }
 
-func (r *Resource) HandleRead(rp RequestParser) (model *Model, err error) {
-	model, err = rp.ParseRequest(r.Req)
+func (r *Resource) HandleRead(ctx context.Context, rp RequestParser) (ct context.Context, err error) {
+	c, err := rp.ParseRequest(ctx, r.Req)
 	if err != nil {
 		return
 	}
 
-	err = r.Source.FindOne(model)
+	ct, err = r.Source.FindOne(c)
 	return
 }
 
-func (r *Resource) HandleCreate(rp RequestParser) (model *Model, err error) {
+func (r *Resource) HandleCreate(ctx context.Context, rp RequestParser) (ct context.Context, err error) {
 	// Unmarshal request model into model values
-	model, err = rp.ParseRequest(r.Req)
+	c, err := rp.ParseRequest(ctx, r.Req)
 	if err != nil {
 		return
 	}
 
-	err = r.Source.Create(model)
+	cx, err := r.Source.Create(c)
 	if err != nil {
 		return
 	}
 
-	err = r.Source.FindOne(model)
+	ct, err = r.Source.FindOne(cx)
 	return
 }
 
-func (r *Resource) HandleUpdate(rp RequestParser) (model *Model, err error) {
-	// Unmarshal request model into model values
-	// CONVENTION: pr.Data => pointer to model struct containing the properties that will be updated
-	model, err = rp.ParseRequest(r.Req)
+func (r *Resource) HandleUpdate(ctx context.Context, rp RequestParser) (ct context.Context, err error) {
+	c, err := rp.ParseRequest(ctx, r.Req)
 	if err != nil {
 		return
 	}
 
-	err = r.Source.Update(model)
+	cx, err := r.Source.Update(c)
 	if err != nil {
 		return
 	}
 
-	err = r.Source.FindOne(model)
+	ct, err = r.Source.FindOne(cx)
 	return
 }
 
-func (r *Resource) HandleDelete(rp RequestParser) (model *Model, err error) {
-	model, err = rp.ParseRequest(r.Req)
+func (r *Resource) HandleDelete(ctx context.Context, rp RequestParser) (ct context.Context, err error) {
+	c, err := rp.ParseRequest(ctx, r.Req)
 	if err != nil {
 		return
 	}
 
-	err = r.Source.FindOne(model)
+	cx, err := r.Source.FindOne(c)
 	if err != nil {
 		return
 	}
 
-	err = r.Source.Delete(model)
+	ct, err = r.Source.Delete(cx)
 	return
 }
 
@@ -190,8 +123,7 @@ func HandleError(req *Req, err error) {
 }
 
 func handleError(req *Req, err error) {
-	// Convert err into an Error
-	apiErr, ok := err.(Error)
+	apiErr, ok := err.(*Error)
 	if !ok {
 		apiErr = WrapErr(err, 500)
 	}
@@ -200,27 +132,27 @@ func handleError(req *Req, err error) {
 	fmt.Fprintln(req.Response, apiErr.HTTPBody())
 }
 
-func (r *Resource) Send(model *Model, rm ResponseMarshaller) error {
-	return send(r.Req, model, rm)
+func (r *Resource) Send(ctx context.Context, rm ResponseMarshaller) error {
+	return send(ctx, r.Req, rm)
 }
 
-func Send(req *Req, model *Model, rm ResponseMarshaller) error {
-	return send(req, model, rm)
+func Send(req *Req, ctx context.Context, rm ResponseMarshaller) error {
+	return send(ctx, req, rm)
 }
 
-func send(req *Req, model *Model, rm ResponseMarshaller) error {
+func send(ctx context.Context, req *Req, rm ResponseMarshaller) error {
 	encoder := JsonEncoder{}
-	data, err := encoder.Encode(rm.Body(model))
+	data, err := encoder.Encode(rm.Body(ctx))
 	if err != nil {
 		return err
 	}
-	headers := rm.Headers(model)
+	headers := rm.Headers(ctx)
 	if headers != nil {
 		for key, val := range headers {
 			req.Response.Header().Set(key, val)
 		}
 	}
-	req.Response.WriteHeader(rm.Status(model))
+	req.Response.WriteHeader(rm.Status(ctx))
 	req.Response.Write(data)
 	return nil
 }

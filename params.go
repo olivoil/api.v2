@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"mime/multipart"
 	"os"
 	"strings"
@@ -60,7 +59,6 @@ func (r *Req) ParseParams() error {
 	case "application/x-www-form-urlencoded":
 		// Typical form.
 		if err := r.Request.ParseForm(); err != nil {
-			r.AddLog(fmt.Sprintf("Error parsing request body: %s", WrapErr(err, 400).Error()))
 			return err
 		} else {
 			r.Params.Form = Values(r.Request.Form)

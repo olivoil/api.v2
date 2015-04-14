@@ -19,27 +19,36 @@ type Error struct {
 	Stack  []byte `json:"-"`
 }
 
-func NewError(status int, title string) Error {
-	err := Error{Status: strconv.Itoa(status), Title: title}
+func NewError(status int, title string) *Error {
+	err := &Error{Status: strconv.Itoa(status), Title: title}
 	err.CaptureStackTrace()
 	return err
 }
 
 // ErrorStack represents several errors
 type Errors struct {
-	Err []Error `json:"errors"`
+	Err []*Error `json:"errors"`
 }
 
 // WrapErr automatically wraps a standard error to an api.Error
-func WrapErr(err error, status int) Error {
+func WrapErr(err error, status int) *Error {
 	apiErr, ok := err.(Error)
-
 	if ok {
 		apiErr.CaptureStackTrace()
-		return apiErr
+		return &apiErr
 	}
 
-	apiErr = Error{
+	apiEr, ok := err.(*Error)
+	if ok {
+		apiEr.CaptureStackTrace()
+		return apiEr
+	}
+
+	if status == 0 {
+		status = 500
+	}
+
+	apiErr = &Error{
 		Status: strconv.Itoa(status),
 		Title:  err.Error(),
 	}
@@ -54,14 +63,14 @@ func (e *Error) CaptureStackTrace() {
 }
 
 // Add returns a stack of errors
-func (e Error) Add(f Error) Errors {
+func (e *Error) Add(f *Error) Errors {
 	return Errors{
-		Err: []Error{e, f},
+		Err: []*Error{e, f},
 	}
 }
 
 // Error returns a nice string representation of an Error
-func (e Error) Error() string {
+func (e *Error) Error() string {
 	if e.Code != "" {
 		return fmt.Sprintf("[%s] (%s) %s", e.Code, e.Status, e.Title)
 	}
@@ -70,7 +79,7 @@ func (e Error) Error() string {
 }
 
 // HTTPStatus returns the int value of the error status
-func (e Error) HTTPStatus() int {
+func (e *Error) HTTPStatus() int {
 	v, err := strconv.Atoi(e.Status)
 	if err != nil {
 		return 0
@@ -79,13 +88,13 @@ func (e Error) HTTPStatus() int {
 }
 
 // HTTPBody returns the body of an http response for the error
-func (e Error) HTTPBody() string {
+func (e *Error) HTTPBody() string {
 	s := Errors{Err: []Error{e}}
 	return s.HTTPBody()
 }
 
 // Add adds an error to a stack of error
-func (s *Errors) Add(e Error) {
+func (s *Errors) Add(e *Error) {
 	s.Err = append(s.Err, e)
 }
 
