@@ -32,12 +32,6 @@ type Errors struct {
 
 // WrapErr automatically wraps a standard error to an api.Error
 func WrapErr(err error, status int) *Error {
-	apiErr, ok := err.(Error)
-	if ok {
-		apiErr.CaptureStackTrace()
-		return &apiErr
-	}
-
 	apiEr, ok := err.(*Error)
 	if ok {
 		apiEr.CaptureStackTrace()
@@ -48,7 +42,7 @@ func WrapErr(err error, status int) *Error {
 		status = 500
 	}
 
-	apiErr = &Error{
+	apiErr := &Error{
 		Status: strconv.Itoa(status),
 		Title:  err.Error(),
 	}
@@ -89,7 +83,7 @@ func (e *Error) HTTPStatus() int {
 
 // HTTPBody returns the body of an http response for the error
 func (e *Error) HTTPBody() string {
-	s := Errors{Err: []Error{e}}
+	s := Errors{Err: []*Error{e}}
 	return s.HTTPBody()
 }
 

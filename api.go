@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/net/context"
 )
 
 func New(prefix string) *API {
@@ -24,15 +25,15 @@ type API struct {
 }
 
 // HandlerFunc
-type HandlerFunc func(*Req)
+type HandlerFunc func(context.Context, *Req)
 
-func (f HandlerFunc) Serve(req *Req) {
-	f(req)
+func (f HandlerFunc) Serve(ctx context.Context, req *Req) {
+	f(ctx, req)
 }
 
 // Handler
 type Handler interface {
-	Serve(req *Req)
+	Serve(ctx context.Context, req *Req)
 }
 
 // Router is an interface that helps activating an API
@@ -54,7 +55,7 @@ func (api *API) Add(e Endpoint) {
 	if _, ok := api.options[e.Path]; !ok {
 		api.options[e.Path] = []string{"OPTIONS"}
 	}
-	api.options[e.Path] = append(api.options[e.Path], e.Verb)
+	api.options[e.Path] = append(api.options[e.Path], e.Method)
 }
 
 // Activate() registers all endpoints in the api
@@ -66,11 +67,11 @@ func (api *API) Activate(r interface{}) error {
 	}
 
 	for _, endpoint := range api.Endpoints {
-		router.Add(endpoint.Verb, "/"+api.prefix+endpoint.Path, endpoint)
+		router.Add(endpoint.Method, "/"+api.prefix+endpoint.Path, endpoint)
 	}
 
 	for path, verbs := range api.options {
-		router.Add("OPTIONS", "/"+api.prefix+path, HandlerFunc(func(r *Req) {
+		router.Add("OPTIONS", "/"+api.prefix+path, HandlerFunc(func(ctx context.Context, r *Req) {
 			r.Response.Header().Set("Allow", strings.Join(verbs, ","))
 			r.Response.WriteHeader(http.StatusNoContent)
 		}))
@@ -101,7 +102,7 @@ type httprouterAdapter struct {
 func (router *httprouterAdapter) Add(method, path string, h Handler) {
 	router.Handle(method, path, func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		req := WrapHttpRouterReq(w, r, ps)
-		h.Serve(req)
+		h.Serve(context.Background(), req)
 	})
 }
 
@@ -117,6 +118,6 @@ type patAdapter struct {
 func (router patAdapter) Add(method, path string, h Handler) {
 	router.r.Add(method, path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		req := WrapReq(w, r)
-		h.Serve(req)
+		h.Serve(context.Background(), req)
 	}))
 }

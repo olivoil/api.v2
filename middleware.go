@@ -11,7 +11,7 @@ type Middleware interface {
 
 	// HandlerFunc to process the incoming request and
 	// returns a http error code and error message if needed.
-	Run(ctx context.Context, r *Req) (error, context.Context)
+	Run(ctx context.Context, r *Req) (context.Context, error)
 
 	// Name of the middleware for debugging
 	Name() string
@@ -19,9 +19,9 @@ type Middleware interface {
 
 // MiddlewareFunc transforms a function with the right signature
 // into a Middleware
-type MiddlewareFunc func(ctx context.Context, r *Req) (error, int)
+type MiddlewareFunc func(ctx context.Context, r *Req) (context.Context, error)
 
-func (m MiddlewareFunc) Run(ctx context.Context, r *Req) (error, int) {
+func (m MiddlewareFunc) Run(ctx context.Context, r *Req) (context.Context, error) {
 	return m(ctx, r)
 }
 

@@ -12,8 +12,8 @@ import (
 // encapsulating information needed to
 // dispatch a request and generate documentation.
 type Endpoint struct {
-	Verb string
-	Path string
+	Method string
+	Path   string
 
 	// The middlewares to execute on the request.
 	Middleware MiddlewareStack
@@ -61,7 +61,7 @@ func (e Endpoint) Serve(ctx context.Context, req *Req) {
 
 	// call each middleware
 	for _, m := range e.Middleware {
-		err, c := m.Run(ctx, req)
+		c, err := m.Run(ctx, req)
 		if err != nil {
 			er := WrapErr(err, 0)
 			req.Response.WriteHeader(er.HTTPStatus())

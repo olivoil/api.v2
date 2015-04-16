@@ -108,7 +108,7 @@ func (r *Req) Decode(v interface{}) (err error) {
 // to catch panics and return a 500 instead so the web server
 // doesn't crash.
 func (r *Req) handlePanic() {
-	var err Error
+	var err *Error
 	if rec := recover(); rec != nil {
 		switch val := rec.(type) {
 		case error:

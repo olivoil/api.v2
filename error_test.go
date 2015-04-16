@@ -17,16 +17,16 @@ var _ = Describe("Error", func() {
 		})
 
 		It("will be marshalled correctly with one error", func() {
-			apiErr := Error{Title: "Bad Request", Status: "400"}
+			apiErr := &Error{Title: "Bad Request", Status: "400"}
 			result := []byte(apiErr.HTTPBody())
 			expected := []byte(`{"errors":[{"status":"400","title":"Bad Request"}]}`)
 			Expect(result).To(MatchJSON(expected))
 		})
 
 		It("will be marshalled correctly with several errors", func() {
-			errorOne := Error{Title: "Bad Request", Status: "400"}
+			errorOne := &Error{Title: "Bad Request", Status: "400"}
 
-			errorTwo := Error{
+			errorTwo := &Error{
 				ID:     "001",
 				Href:   "http://bla/blub",
 				Status: "500",

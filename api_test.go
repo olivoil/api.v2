@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,20 +11,27 @@ import (
 	"github.com/julienschmidt/httprouter"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"golang.org/x/net/context"
+)
+
+type authKey int
+
+var (
+	userID authKey = 0
 )
 
 // Login middleware
-func login(r *Req) (error, int) {
-	r.Set("userID", "1")
-	return nil, http.StatusOK
+func login(ctx context.Context, r *Req) (context.Context, error) {
+	return context.WithValue(ctx, userID, "1"), nil
 }
 
 // Auth middleware
-func auth(r *Req) (error, int) {
-	if ok := r.GetString("userID"); ok != "" {
-		return nil, http.StatusOK
+func auth(ctx context.Context, r *Req) (context.Context, error) {
+	id, ok := ctx.Value(userID).(string)
+	if !ok || id == "" {
+		return ctx, NewError(http.StatusUnauthorized, "not authenticated")
 	}
-	return errors.New("not authenticated"), http.StatusUnauthorized
+	return ctx, nil
 }
 
 type pet struct {
@@ -37,10 +43,10 @@ func makeAPI() *API {
 	api := New("v1")
 
 	api.Add(Endpoint{
-		Verb:       "POST",
+		Method:     "POST",
 		Path:       "/pets",
 		Middleware: []Middleware{MiddlewareFunc(auth)},
-		Implementation: func(r *Req) {
+		Implementation: func(ctx context.Context, r *Req) {
 			pet := pet{}
 			err := r.Decode(&pet)
 
@@ -56,10 +62,10 @@ func makeAPI() *API {
 	})
 
 	api.Add(Endpoint{
-		Verb:       "PUT",
+		Method:     "PUT",
 		Path:       "/pets/:id",
 		Middleware: []Middleware{MiddlewareFunc(login), MiddlewareFunc(auth)},
-		Implementation: func(r *Req) {
+		Implementation: func(ctx context.Context, r *Req) {
 			pet := pet{ID: r.Params.Get(":id")}
 			err := r.Decode(&pet)
 
