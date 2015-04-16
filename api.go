@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -19,9 +20,10 @@ func New(prefix string) *API {
 
 // Top-level API structure
 type API struct {
-	Endpoints []Endpoint
-	options   map[string][]string
-	prefix    string
+	Endpoints  []Endpoint
+	Middleware MiddlewareStack
+	options    map[string][]string
+	prefix     string
 }
 
 // HandlerFunc
@@ -58,6 +60,11 @@ func (api *API) Add(e Endpoint) {
 	api.options[e.Path] = append(api.options[e.Path], e.Method)
 }
 
+// Append a middleware to the middleware stack.
+func (api *API) Use(mw Middleware) {
+	api.Middleware = append(api.Middleware, mw)
+}
+
 // Activate() registers all endpoints in the api
 // to the provided router
 func (api *API) Activate(r interface{}) error {
@@ -67,7 +74,7 @@ func (api *API) Activate(r interface{}) error {
 	}
 
 	for _, endpoint := range api.Endpoints {
-		router.Add(endpoint.Method, "/"+api.prefix+endpoint.Path, endpoint)
+		api.activateEndpoint(endpoint, router)
 	}
 
 	for path, verbs := range api.options {
@@ -78,6 +85,23 @@ func (api *API) Activate(r interface{}) error {
 	}
 
 	return nil
+}
+
+func (api *API) activateEndpoint(e Endpoint, r Router) {
+	r.Add(e.Method, "/"+api.prefix+e.Path, HandlerFunc(func(ctx context.Context, r *Req) {
+		for _, m := range api.Middleware {
+			c, err := m.Run(ctx, r)
+			if err != nil {
+				er := WrapErr(err, 0)
+				r.Response.WriteHeader(er.HTTPStatus())
+				fmt.Fprintln(r.Response, er.HTTPBody())
+				return
+			}
+			ctx = c
+		}
+
+		e.Serve(ctx, r)
+	}))
 }
 
 // Wrap a router to be used with Activate

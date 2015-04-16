@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,15 +15,23 @@ import (
 	"golang.org/x/net/context"
 )
 
-type authKey int
+type key int
 
 var (
-	userID authKey = 0
+	userID  key = 0
+	version key = 1
 )
+
+// API version middleware
+func versionMiddleware(ctx context.Context, r *Req) (context.Context, error) {
+	r.Response.Header().Set("X-Api-Version", "0.0.1")
+	return context.WithValue(ctx, version, "0.0.1"), nil
+}
 
 // Login middleware
 func login(ctx context.Context, r *Req) (context.Context, error) {
-	return context.WithValue(ctx, userID, "1"), nil
+	c := context.WithValue(ctx, userID, "1")
+	return c, nil
 }
 
 // Auth middleware
@@ -42,12 +51,14 @@ type pet struct {
 func makeAPI() *API {
 	api := New("v1")
 
+	api.Use(MiddlewareFunc(versionMiddleware))
+
 	api.Add(Endpoint{
-		Method:     "POST",
-		Path:       "/pets",
-		Middleware: []Middleware{MiddlewareFunc(auth)},
+		Method:     "PUT",
+		Path:       "/pets/:id",
+		Middleware: []Middleware{MiddlewareFunc(login), MiddlewareFunc(auth)},
 		Implementation: func(ctx context.Context, r *Req) {
-			pet := pet{}
+			pet := pet{ID: r.Params.Get(":id")}
 			err := r.Decode(&pet)
 
 			b, err := json.Marshal(pet)
@@ -62,11 +73,11 @@ func makeAPI() *API {
 	})
 
 	api.Add(Endpoint{
-		Method:     "PUT",
-		Path:       "/pets/:id",
-		Middleware: []Middleware{MiddlewareFunc(login), MiddlewareFunc(auth)},
+		Method:     "POST",
+		Path:       "/pets",
+		Middleware: []Middleware{MiddlewareFunc(auth)},
 		Implementation: func(ctx context.Context, r *Req) {
-			pet := pet{ID: r.Params.Get(":id")}
+			pet := pet{}
 			err := r.Decode(&pet)
 
 			b, err := json.Marshal(pet)
@@ -94,6 +105,7 @@ var _ = Describe("api integration", func() {
 			req, _ := http.NewRequest("POST", "/v1/pets", strings.NewReader(`{"name":"moufassa","id":"king"}`))
 			router.ServeHTTP(res, req)
 
+			Expect(res.Header().Get("X-Api-Version")).To(Equal("0.0.1"))
 			Expect(res.Code).To(Equal(401))
 
 			data, err := jason.NewObjectFromReader(res.Body)
@@ -122,8 +134,10 @@ var _ = Describe("api integration", func() {
 
 			res := httptest.NewRecorder()
 			req, _ := http.NewRequest("PUT", "/v1/pets/abc", strings.NewReader(`{"name":"simba"}`))
+			fmt.Printf("ServeHTTP %v %v\n", req.Method, req.URL.String())
 			router.ServeHTTP(res, req)
 
+			Expect(res.Header().Get("X-Api-Version")).To(Equal("0.0.1"))
 			Expect(res.Code).To(Equal(200))
 
 			data, err := jason.NewObjectFromReader(res.Body)
@@ -149,6 +163,7 @@ var _ = Describe("api integration", func() {
 			req, _ := http.NewRequest("POST", "/v1/pets", strings.NewReader(`{"name":"moufassa","id":"abc"}`))
 			router.ServeHTTP(res, req)
 
+			Expect(res.Header().Get("X-Api-Version")).To(Equal("0.0.1"))
 			Expect(res.Code).To(Equal(401))
 
 			data, err := jason.NewObjectFromReader(res.Body)
@@ -179,6 +194,7 @@ var _ = Describe("api integration", func() {
 			req, _ := http.NewRequest("PUT", "/v1/pets/abc", strings.NewReader(`{"name":"simba"}`))
 			router.ServeHTTP(res, req)
 
+			Expect(res.Header().Get("X-Api-Version")).To(Equal("0.0.1"))
 			Expect(res.Code).To(Equal(200))
 
 			data, err := jason.NewObjectFromReader(res.Body)
