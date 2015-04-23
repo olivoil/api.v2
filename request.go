@@ -83,7 +83,7 @@ func (r *Req) JsonBody() ([]byte, error) {
 	if err != nil {
 		return json, err
 	}
-	return json, nil
+	return json, r.Request.Body.Close()
 }
 
 func (r *Req) JsonForm() ([]byte, error) {

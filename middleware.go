@@ -9,6 +9,7 @@ import (
 
 type Middleware interface {
 
+	// TODO: wrapping middleware (i.e. for logging)
 	// HandlerFunc to process the incoming request and
 	// returns a http error code and error message if needed.
 	Run(ctx context.Context, r *Req) (context.Context, error)

@@ -136,7 +136,7 @@ func (r *Resource) Send(ctx context.Context, rm ResponseMarshaller) error {
 	return send(ctx, r.Req, rm)
 }
 
-func Send(req *Req, ctx context.Context, rm ResponseMarshaller) error {
+func Send(ctx context.Context, req *Req, rm ResponseMarshaller) error {
 	return send(ctx, req, rm)
 }
 
