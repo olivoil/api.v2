@@ -96,7 +96,7 @@ func makeAPI() *API {
 
 var _ = Describe("api integration", func() {
 	Context("httprouter", func() {
-		FIt("handles a failing middleware", func() {
+		It("handles a failing middleware", func() {
 			router := httprouter.New()
 			api := makeAPI()
 			api.Activate(router)
