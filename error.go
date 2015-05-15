@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"runtime"
 	"strconv"
 )
 
@@ -16,13 +15,10 @@ type Error struct {
 	Title  string `json:"title,omitempty,required"`
 	Detail string `json:"detail,omitempty"`
 	Path   string `json:"path,omitempty"`
-	Stack  []byte `json:"-"`
 }
 
 func NewError(status int, title string) *Error {
-	err := &Error{Status: strconv.Itoa(status), Title: title}
-	err.CaptureStackTrace()
-	return err
+	return &Error{Status: strconv.Itoa(status), Title: title}
 }
 
 // ErrorStack represents several errors
@@ -34,7 +30,6 @@ type Errors struct {
 func WrapErr(err error, status int) *Error {
 	apiEr, ok := err.(*Error)
 	if ok {
-		apiEr.CaptureStackTrace()
 		return apiEr
 	}
 
@@ -47,13 +42,7 @@ func WrapErr(err error, status int) *Error {
 		Title:  err.Error(),
 	}
 
-	apiErr.CaptureStackTrace()
 	return apiErr
-}
-
-func (e *Error) CaptureStackTrace() {
-	stack := make([]byte, 1024*8)
-	e.Stack = stack[:runtime.Stack(stack, true)]
 }
 
 // Add returns a stack of errors

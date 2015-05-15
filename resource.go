@@ -48,70 +48,85 @@ func NewResource(req *Req, source DataSource) *Resource {
 	}
 }
 
-func (r *Resource) HandleIndex(ctx context.Context, rp RequestParser) (ct context.Context, err error) {
-	c, err := rp.ParseRequest(ctx, r.Req)
-	if err != nil {
-		return
-	}
-
-	ct, err = r.Source.FindAll(c)
-	return
+func (r *Resource) Index(ctx context.Context) (context.Context, error) {
+	return r.Source.FindAll(ctx)
 }
 
-func (r *Resource) HandleRead(ctx context.Context, rp RequestParser) (ct context.Context, err error) {
+func (r *Resource) HandleIndex(ctx context.Context, rp RequestParser) (context.Context, error) {
 	c, err := rp.ParseRequest(ctx, r.Req)
 	if err != nil {
-		return
+		return c, err
 	}
 
-	ct, err = r.Source.FindOne(c)
-	return
+	return r.Index(c)
 }
 
-func (r *Resource) HandleCreate(ctx context.Context, rp RequestParser) (ct context.Context, err error) {
+func (r *Resource) Read(ctx context.Context) (context.Context, error) {
+	return r.Source.FindOne(ctx)
+}
+
+func (r *Resource) HandleRead(ctx context.Context, rp RequestParser) (context.Context, error) {
+	c, err := rp.ParseRequest(ctx, r.Req)
+	if err != nil {
+		return c, err
+	}
+
+	return r.Read(c)
+}
+
+func (r *Resource) Create(ctx context.Context) (context.Context, error) {
+	c, err := r.Source.Create(ctx)
+	if err != nil {
+		return c, err
+	}
+
+	return r.Source.FindOne(c)
+}
+
+func (r *Resource) HandleCreate(ctx context.Context, rp RequestParser) (context.Context, error) {
 	// Unmarshal request model into model values
 	c, err := rp.ParseRequest(ctx, r.Req)
 	if err != nil {
-		return
+		return c, err
 	}
 
-	cx, err := r.Source.Create(c)
-	if err != nil {
-		return
-	}
-
-	ct, err = r.Source.FindOne(cx)
-	return
+	return r.Create(c)
 }
 
-func (r *Resource) HandleUpdate(ctx context.Context, rp RequestParser) (ct context.Context, err error) {
-	c, err := rp.ParseRequest(ctx, r.Req)
+func (r *Resource) Update(ctx context.Context) (context.Context, error) {
+	c, err := r.Source.Update(ctx)
 	if err != nil {
-		return
+		return c, err
 	}
 
-	cx, err := r.Source.Update(c)
-	if err != nil {
-		return
-	}
-
-	ct, err = r.Source.FindOne(cx)
-	return
+	return r.Source.FindOne(c)
 }
 
-func (r *Resource) HandleDelete(ctx context.Context, rp RequestParser) (ct context.Context, err error) {
+func (r *Resource) HandleUpdate(ctx context.Context, rp RequestParser) (context.Context, error) {
 	c, err := rp.ParseRequest(ctx, r.Req)
 	if err != nil {
-		return
+		return c, err
 	}
 
-	cx, err := r.Source.FindOne(c)
+	return r.Update(c)
+}
+
+func (r *Resource) Delete(ctx context.Context) (context.Context, error) {
+	c, err := r.Source.FindOne(ctx)
 	if err != nil {
-		return
+		return c, err
 	}
 
-	ct, err = r.Source.Delete(cx)
-	return
+	return r.Source.Delete(c)
+}
+
+func (r *Resource) HandleDelete(ctx context.Context, rp RequestParser) (context.Context, error) {
+	c, err := rp.ParseRequest(ctx, r.Req)
+	if err != nil {
+		return c, err
+	}
+
+	return r.Delete(c)
 }
 
 func (r *Resource) HandleError(err error) {

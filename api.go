@@ -12,7 +12,7 @@ import (
 
 func New(prefix string) *API {
 	return &API{
-		prefix:    prefix,
+		Prefix:    prefix,
 		Endpoints: []Endpoint{},
 		options:   map[string][]string{},
 	}
@@ -23,7 +23,7 @@ type API struct {
 	Endpoints  []Endpoint
 	Middleware MiddlewareStack
 	options    map[string][]string
-	prefix     string
+	Prefix     string
 }
 
 // HandlerFunc
@@ -78,7 +78,7 @@ func (api *API) Activate(r interface{}) error {
 	}
 
 	for path, verbs := range api.options {
-		router.Add("OPTIONS", "/"+api.prefix+path, HandlerFunc(func(ctx context.Context, r *Req) {
+		router.Add("OPTIONS", api.Prefix+path, HandlerFunc(func(ctx context.Context, r *Req) {
 			r.Response.Header().Set("Allow", strings.Join(verbs, ","))
 			r.Response.WriteHeader(http.StatusNoContent)
 		}))
@@ -88,7 +88,7 @@ func (api *API) Activate(r interface{}) error {
 }
 
 func (api *API) activateEndpoint(e Endpoint, r Router) {
-	r.Add(e.Method, "/"+api.prefix+e.Path, HandlerFunc(func(ctx context.Context, r *Req) {
+	r.Add(e.Method, api.Prefix+e.Path, HandlerFunc(func(ctx context.Context, r *Req) {
 		for _, m := range api.Middleware {
 			c, err := m.Run(ctx, r)
 			if err != nil {

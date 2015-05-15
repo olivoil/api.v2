@@ -120,3 +120,13 @@ func (r *Req) handlePanic() {
 		http.Error(r.Response, err.HTTPBody(), err.HTTPStatus())
 	}
 }
+
+// NoContent sends a response with no body and a status code.
+func (r *Req) NoContent(code int) {
+	r.Response.WriteHeader(code)
+}
+
+// Redirect redirects the request using http.Redirect with status code.
+func (r *Req) Redirect(code int, url string) {
+	http.Redirect(r.Response, r.Request, url, code)
+}
