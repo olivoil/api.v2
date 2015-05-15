@@ -49,7 +49,7 @@ type pet struct {
 }
 
 func makeAPI() *API {
-	api := New("v1")
+	api := New("/v1")
 
 	api.Use(MiddlewareFunc(versionMiddleware))
 
@@ -96,7 +96,7 @@ func makeAPI() *API {
 
 var _ = Describe("api integration", func() {
 	Context("httprouter", func() {
-		It("handles a failing middleware", func() {
+		FIt("handles a failing middleware", func() {
 			router := httprouter.New()
 			api := makeAPI()
 			api.Activate(router)
