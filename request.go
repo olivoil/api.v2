@@ -22,6 +22,7 @@ type Req struct {
 	Request     *http.Request
 	Params      *Params // Parameters from URL and form (including multipart). Keep in ctx instead?
 	ContentType string  // Content-Type of the request
+	body        []byte
 }
 
 func NewReq(w http.ResponseWriter, r *http.Request, p *Params) *Req {
@@ -79,11 +80,8 @@ func (r *Req) JsonBody() ([]byte, error) {
 	if r.Request.Body == nil {
 		return []byte{}, nil
 	}
-	json, err := ioutil.ReadAll(r.Request.Body)
-	if err != nil {
-		return json, err
-	}
-	return json, r.Request.Body.Close()
+	defer r.Request.Body.Close()
+	return ioutil.ReadAll(r.Request.Body)
 }
 
 func (r *Req) JsonForm() ([]byte, error) {
@@ -94,14 +92,16 @@ func (r *Req) JsonForm() ([]byte, error) {
 }
 
 // Decode decodes a request body into the value pointed to by v.
-func (r *Req) Decode(v interface{}) (err error) {
-	b, err := r.JsonBody()
-	if err != nil {
-		return
+func (r *Req) Decode(v interface{}) error {
+	if r.body == nil {
+		b, err := ioutil.ReadAll(r.Request.Body)
+		if err != nil {
+			return err
+		}
+		r.body = b
 	}
 
-	err = json.Unmarshal(b, v)
-	return
+	return json.Unmarshal(r.body, v)
 }
 
 // handlePanic is a function usually used in defer
